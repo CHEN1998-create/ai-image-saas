@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "cross-env HTTPS_PROXY=socks5://127.0.0.1:10808 HTTP_PROXY=socks5://127.0.0.1:10808 next dev",
+    "dev:direct": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "tsx scripts/seed-pg.ts"
+    "seed": "cross-env HTTPS_PROXY=socks5://127.0.0.1:10808 HTTP_PROXY=socks5://127.0.0.1:10808 tsx scripts/seed-pg.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.0",
@@ -29,6 +30,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.19",
+    "cross-env": "^10.1.0",
     "dotenv": "^18.0.3",
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.6",
