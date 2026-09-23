@@ -36,3 +36,4 @@ yarn-error.log*
 .vercel
 cookies.txt
 .build.log
+.dev.log
