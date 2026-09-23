@@ -82,6 +82,11 @@ export default function ExplorePage() {
         ))}
       </div>
 
+      {list.length === 0 ? (
+        <div className="py-16 text-center text-sm text-muted-foreground">
+          暂无作品，快去生成并分享第一幅作品吧
+        </div>
+      ) : (
       <div className="columns-2 md:columns-3 lg:columns-4 gap-4 [column-fill:_balance]">
         {list.map((p) => (
           <Link
@@ -138,6 +143,7 @@ export default function ExplorePage() {
           </Link>
         ))}
       </div>
+      )}
     </div>
   );
 }

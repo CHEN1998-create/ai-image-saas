@@ -6,7 +6,8 @@ import {
   Check,
   TrendingUp,
   TrendingDown,
-  Calendar
+  Calendar,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -22,12 +23,18 @@ export default function PointsPage() {
   } | null>(null);
   const [checked, setChecked] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
 
   const load = useCallback(() => {
+    setStatus("loading");
     fetch("/api/points")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then((d) => {
         setData(d);
+        setStatus("ok");
         setChecked(
           d.records?.some(
             (r: PointRecord) =>
@@ -36,7 +43,7 @@ export default function PointsPage() {
           ) ?? false
         );
       })
-      .catch(() => setData(null));
+      .catch(() => setStatus("error"));
   }, []);
 
   useEffect(() => {
@@ -60,6 +67,24 @@ export default function PointsPage() {
   const monthEarn = data?.monthEarn ?? 0;
   const monthSpend = data?.monthSpend ?? 0;
   const records = data?.records ?? [];
+
+  if (status === "loading") {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+  if (status === "error") {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+        <p className="text-sm">积分数据加载失败，请检查网络后重试</p>
+        <Button variant="outline" size="sm" onClick={load}>
+          重新加载
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">

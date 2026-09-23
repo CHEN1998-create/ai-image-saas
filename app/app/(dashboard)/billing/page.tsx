@@ -25,11 +25,25 @@ export default function BillingPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [pending, setPending] = useState<string | null>(null);
+  const [plansFailed, setPlansFailed] = useState(false);
+  const [ordersFailed, setOrdersFailed] = useState(false);
 
   useEffect(() => {
     fetch("/api/me").then((r) => r.json()).then((d) => setMe(d.user));
-    fetch("/api/billing/plans").then((r) => r.json()).then((d) => setPlans(d.plans));
-    fetch("/api/billing/records").then((r) => r.json()).then((d) => setOrders(d.records));
+    fetch("/api/billing/plans")
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then((d) => setPlans(d.plans ?? []))
+      .catch(() => setPlansFailed(true));
+    fetch("/api/billing/records")
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then((d) => setOrders(d.records ?? []))
+      .catch(() => setOrdersFailed(true));
   }, []);
 
   async function checkout(payload: Record<string, unknown>, key: string) {
@@ -93,6 +107,16 @@ export default function BillingPage() {
 
       {/* 套餐 */}
       <h2 className="font-semibold mb-4">升级套餐（按月订阅）</h2>
+      {!me ? null : plansFailed ? (
+        <p className="text-sm text-muted-foreground mb-8">
+          套餐加载失败，请刷新页面重试
+        </p>
+      ) : plans.length === 0 ? (
+        <p className="text-sm text-muted-foreground mb-8">
+          <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+          正在加载套餐…
+        </p>
+      ) : (
       <div className="grid md:grid-cols-4 gap-4 mb-8">
         {plans.map((p) => {
           const current = p.code === me.plan;
@@ -126,6 +150,7 @@ export default function BillingPage() {
           );
         })}
       </div>
+      )}
 
       {/* 积分包 */}
       <h2 className="font-semibold mb-4 flex items-center gap-2">
@@ -157,7 +182,9 @@ export default function BillingPage() {
 
       {/* 最近订单 */}
       <h2 className="font-semibold mb-4">最近订单</h2>
-      {orders.length === 0 ? (
+      {ordersFailed ? (
+        <p className="text-sm text-muted-foreground">订单加载失败，请刷新页面重试</p>
+      ) : orders.length === 0 ? (
         <p className="text-sm text-muted-foreground">还没有订单记录</p>
       ) : (
         <Card className="divide-y divide-border">

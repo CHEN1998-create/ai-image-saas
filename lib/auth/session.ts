@@ -51,6 +51,7 @@ export async function createSession(user: AuthUser): Promise<void> {
   cookieStore().set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS
   });
