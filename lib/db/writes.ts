@@ -248,7 +248,12 @@ export async function publishPost(
 export async function togglePostLike(
   postId: string,
   userId: string
-): Promise<Post | null> {
+): Promise<boolean> {
+  const exists = await query(
+    "select 1 from lumen.shared_posts where id = $1",
+    [postId]
+  );
+  if (exists.rows.length === 0) return false;
   const cur = await query(
     "select * from lumen.post_likes where post_id = $1 and user_id = $2",
     [postId, userId]
@@ -262,7 +267,7 @@ export async function togglePostLike(
       values ($1,$2,$3,$4)
     `, [nextId("l"), postId, userId, now]);
   }
-  return null;
+  return true;
 }
 
 export async function addComment(
@@ -270,6 +275,11 @@ export async function addComment(
   user: AuthUser,
   content: string
 ): Promise<Comment | null> {
+  const exists = await query(
+    "select 1 from lumen.shared_posts where id = $1",
+    [postId]
+  );
+  if (exists.rows.length === 0) return null;
   const id = nextId("c");
   const now = new Date();
   await query(`

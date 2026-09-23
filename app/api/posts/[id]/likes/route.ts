@@ -8,8 +8,9 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   const user = await requireUser();
-  const post = await togglePostLike(params.id, user.id);
-  return NextResponse.json({ post });
+  const ok = await togglePostLike(params.id, user.id);
+  if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(
@@ -17,6 +18,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   const user = await requireUser();
-  const post = await togglePostLike(params.id, user.id);
-  return NextResponse.json({ post });
+  const ok = await togglePostLike(params.id, user.id);
+  if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ ok: true });
 }
