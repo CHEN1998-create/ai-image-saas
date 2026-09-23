@@ -1,0 +1,57 @@
+
+> ai-image-saas@0.1.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use, trying 3001 instead.
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3001
+
+ ✓ Starting...
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+ ✓ Ready in 6.6s
+ ✓ Compiled /middleware in 649ms
+ ✓ Compiled (74 modules)
+ ○ Compiling /app/login ...
+The user aborted a request.
+
+Retrying 1/3...
+The user aborted a request.
+
+Retrying 1/3...
+The user aborted a request.
+
+Retrying 1/3...
+The user aborted a request.
+
+Retrying 1/3...
+The user aborted a request.
+
+Retrying 1/3...
+The user aborted a request.
+
+Retrying 1/3...
+The user aborted a request.
+
+Retrying 1/3...
+The user aborted a request.
+
+Retrying 1/3...
+The user aborted a request.
+
+Retrying 2/3...
+ ✓ Compiled /app/login in 22.1s (553 modules)
+ GET /app/login 200 in 274ms
+ ○ Compiling /api/auth/login ...
+ ✓ Compiled /api/auth/login in 1060ms (318 modules)
+ POST /api/auth/login 200 in 1449ms
+ ○ Compiling /admin ...
+ ✓ Compiled /admin in 1460ms (642 modules)
+ GET /admin 200 in 1948ms
+ POST /api/auth/login 200 in 162ms
+ ○ Compiling /app/posts/[id] ...
+ ✓ Compiled /app/posts/[id] in 964ms (667 modules)
+ GET /app/posts/post_1 200 in 2548ms

@@ -1,0 +1,107 @@
+
+> ai-image-saas@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.5
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Skipping linting
+   Checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/44) ...
+   Generating static pages (11/44) 
+   Generating static pages (22/44) 
+Error: PostgreSQL env 未配置：请在 .env.local 填 PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD
+    at E:\游戏\现代AI生图\.next\server\chunks\2449.js:77:513
+    at o (E:\游戏\现代AI生图\.next\server\chunks\2449.js:77:726)
+    at m (E:\游戏\现代AI生图\.next\server\chunks\2449.js:41:203)
+    at h (E:\游戏\现代AI生图\.next\server\app\admin\plans\page.js:36:382)
+    at eh (E:\游戏\现代AI生图\node_modules\next\dist\compiled\next-server\app-page.runtime.prod.js:12:134786)
+    at e (E:\游戏\现代AI生图\node_modules\next\dist\compiled\next-server\app-page.runtime.prod.js:12:137671)
+    at ek (E:\游戏\现代AI生图\node_modules\next\dist\compiled\next-server\app-page.runtime.prod.js:12:138145)
+    at Array.toJSON (E:\游戏\现代AI生图\node_modules\next\dist\compiled\next-server\app-page.runtime.prod.js:12:135755)
+    at stringify (<anonymous>)
+    at eR (E:\游戏\现代AI生图\node_modules\next\dist\compiled\next-server\app-page.runtime.prod.js:12:142219) {
+  digest: '2630544873'
+}
+Error: PostgreSQL env 未配置：请在 .env.local 填 PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD
+    at E:\游戏\现代AI生图\.next\server\chunks\2449.js:77:513
+    at o (E:\游戏\现代AI生图\.next\server\chunks\2449.js:77:726)
+    at m (E:\游戏\现代AI生图\.next\server\chunks\2449.js:41:203)
+    at h (E:\游戏\现代AI生图\.next\server\app\admin\plans\page.js:36:382)
+    at eh (E:\游戏\现代AI生图\node_modules\next\dist\compiled\next-server\app-page.runtime.prod.js:12:134786)
+    at e (E:\游戏\现代AI生图\node_modules\next\dist\compiled\next-server\app-page.runtime.prod.js:12:137671)
+    at ek (E:\游戏\现代AI生图\node_modules\next\dist\compiled\next-server\app-page.runtime.prod.js:12:138145)
+    at Array.toJSON (E:\游戏\现代AI生图\node_modules\next\dist\compiled\next-server\app-page.runtime.prod.js:12:135755)
+    at stringify (<anonymous>)
+    at eR (E:\游戏\现代AI生图\node_modules\next\dist\compiled\next-server\app-page.runtime.prod.js:12:142219) {
+  digest: '2630544873'
+}
+   Generating static pages (33/44) 
+ ✓ Generating static pages (44/44)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    159 B          87.2 kB
+├ ○ /_not-found                          871 B          87.9 kB
+├ ƒ /admin                               159 B          87.2 kB
+├ ƒ /admin/analytics                     159 B          87.2 kB
+├ ƒ /admin/billing                       2.91 kB         101 kB
+├ ƒ /admin/observability                 159 B          87.2 kB
+├ ƒ /admin/operations                    159 B          87.2 kB
+├ ƒ /admin/plans                         159 B          87.2 kB
+├ ƒ /admin/posts                         2.86 kB         101 kB
+├ ƒ /admin/tasks                         2.67 kB         101 kB
+├ ƒ /admin/users                         2.95 kB         102 kB
+├ ƒ /api/admin/analytics/overview        0 B                0 B
+├ ƒ /api/admin/analytics/points          0 B                0 B
+├ ƒ /api/admin/analytics/retention       0 B                0 B
+├ ƒ /api/admin/analytics/subscriptions   0 B                0 B
+├ ƒ /api/admin/billing                   0 B                0 B
+├ ƒ /api/admin/overview                  0 B                0 B
+├ ƒ /api/admin/posts                     0 B                0 B
+├ ƒ /api/admin/tasks                     0 B                0 B
+├ ƒ /api/admin/users                     0 B                0 B
+├ ƒ /api/auth/login                      0 B                0 B
+├ ƒ /api/auth/logout                     0 B                0 B
+├ ƒ /api/auth/register                   0 B                0 B
+├ ƒ /api/billing/plans                   0 B                0 B
+├ ƒ /api/billing/records                 0 B                0 B
+├ ƒ /api/gallery                         0 B                0 B
+├ ƒ /api/gallery/[id]                    0 B                0 B
+├ ƒ /api/gallery/[id]/favorite           0 B                0 B
+├ ƒ /api/generations                     0 B                0 B
+├ ƒ /api/me                              0 B                0 B
+├ ƒ /api/points                          0 B                0 B
+├ ƒ /api/points/check-in                 0 B                0 B
+├ ƒ /api/posts                           0 B                0 B
+├ ƒ /api/posts/[id]                      0 B                0 B
+├ ƒ /api/posts/[id]/comments             0 B                0 B
+├ ƒ /api/posts/[id]/likes                0 B                0 B
+├ ƒ /api/posts/[id]/repost               0 B                0 B
+├ ƒ /app/billing                         2.76 kB         101 kB
+├ ƒ /app/explore                         2.3 kB          108 kB
+├ ƒ /app/gallery                         3.59 kB          98 kB
+├ ƒ /app/generate                        4.7 kB          103 kB
+├ ○ /app/login                           3.12 kB         104 kB
+├ ƒ /app/points                          3.26 kB        97.7 kB
+├ ƒ /app/posts/[id]                      178 B            94 kB
+├ ○ /app/register                        3.39 kB         105 kB
+├ ƒ /app/settings                        159 B          87.2 kB
+├ ○ /www                                 178 B            94 kB
+├ ○ /www/faq                             2.22 kB         108 kB
+└ ○ /www/pricing                         3.11 kB         108 kB
++ First Load JS shared by all            87.1 kB
+  ├ chunks/23-aac9ecf6241460f3.js        31.5 kB
+  ├ chunks/fd9d1056-aa9555cb32eb619b.js  53.6 kB
+  └ other shared chunks (total)          1.89 kB
+
+
+ƒ Middleware                             27.1 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
