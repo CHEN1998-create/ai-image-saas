@@ -8,6 +8,7 @@ import {
   type ProviderGenerateRequest,
   type ProviderImage
 } from "./types";
+import { translateToEnglish } from "./translate";
 
 const API_BASE =
   process.env.SILICONFLOW_BASE_URL ?? "https://api.siliconflow.cn/v1";
@@ -45,16 +46,18 @@ export const siliconflowProvider: ImageProvider = {
 
     const realModel = MODEL_MAP[req.model] ?? "Kwai-Kolors/Kolors";
     const { width, height } = RATIO_SIZES[req.ratio] ?? RATIO_SIZES["1:1"];
+    // 中文 prompt 翻译为英文（失败自动回退原文），提升模型理解
+    const prompt = await translateToEnglish(req.prompt);
 
     const body: Record<string, unknown> = {
       model: realModel,
-      prompt: req.prompt,
+      prompt,
       image_size: `${width}x${height}`,
       batch_size: 1,
       seed: req.seed
     };
     if (req.negativePrompt && SUPPORTS_NEGATIVE.test(realModel)) {
-      body.negative_prompt = req.negativePrompt;
+      body.negative_prompt = await translateToEnglish(req.negativePrompt);
     }
 
     const res = await fetch(`${API_BASE}/images/generations`, {

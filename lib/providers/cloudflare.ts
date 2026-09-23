@@ -4,6 +4,7 @@
 
 import { socksDispatcher } from "fetch-socks";
 import { fetch as undiciFetch } from "undici";
+import { translateToEnglish } from "./translate";
 import {
   type ImageProvider,
   type ProviderGenerateRequest,
@@ -59,12 +60,14 @@ export const cloudflareAIProvider: ImageProvider = {
 
     const { width, height } = RATIO_SIZES[req.ratio] ?? RATIO_SIZES["1:1"];
     const steps = MODEL_STEPS[req.model] ?? 8;
+    // 中文 prompt 翻译为英文（失败自动回退原文），提升模型理解
+    const prompt = await translateToEnglish(req.prompt);
 
     // Workers AI SDXL 偶发返回全黑图（特定 seed 触发，黑图 PNG 仅几 KB），换 seed 重试
     let buffer: Buffer | null = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       buffer = await runModel(
-        req.prompt,
+        prompt,
         req.negativePrompt,
         width,
         height,
