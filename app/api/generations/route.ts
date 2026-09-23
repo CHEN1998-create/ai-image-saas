@@ -1,6 +1,7 @@
 // POST /api/generations — 创建生图任务（异步执行）
 // 立即返回 queued 任务，执行器后台跑，前端轮询 GET /api/generations/[id]
 import { NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { requireUser } from "@/lib/auth";
 import { createQueuedTask } from "@/lib/db";
 import { executeTask } from "@/lib/tasks/executor";
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   });
 
   // fire-and-forget：执行器在响应返回后继续跑
-  void executeTask(task.id);
+  waitUntil(executeTask(task.id));
 
   return NextResponse.json({ task });
 }

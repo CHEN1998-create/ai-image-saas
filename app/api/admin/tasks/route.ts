@@ -1,5 +1,6 @@
 // Admin: 任务管理 — 列表/状态筛选 + 取消任务 + 失败重试
 import { NextResponse, type NextRequest } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { requireAdmin } from "@/lib/auth";
 import { getAdminTasks } from "@/lib/db";
 import { cancelTask, retryTask } from "@/lib/db/writes";
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.reason }, { status: 409 });
     }
     // fire-and-forget 执行新任务
-    void executeTask(result.newTaskId!);
+    waitUntil(executeTask(result.newTaskId!));
     return NextResponse.json(result);
   }
 
