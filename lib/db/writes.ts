@@ -4,6 +4,7 @@
 
 import { query } from "@/lib/pg";
 import { applyPointsDelta } from "@/lib/auth";
+import { deleteTaskObjects } from "@/lib/storage";
 import { nextId, toIso } from "./store";
 import type { AuthUser } from "@/lib/auth";
 import type {
@@ -333,4 +334,181 @@ export async function repostPost(
 // ---------- 每日签到 ----------
 export async function checkIn(user: AuthUser): Promise<PointRecord> {
   return addPointRecord(user.id, 20, "每日签到");
+}
+
+// ============================================================
+// 后台管理操作
+// ============================================================
+
+// ---------- 用户封禁/解封 ----------
+export async function setUserStatus(
+  userId: string,
+  status: "active" | "banned"
+): Promise<boolean> {
+  const res = await query(
+    "update lumen.users set status = $1 where id = $2",
+    [status, userId]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+// ---------- 管理员调整积分 ----------
+export async function adminAdjustPoints(
+  userId: string,
+  delta: number,
+  reason: string
+): Promise<PointRecord | null> {
+  if (!Number.isInteger(delta) || delta === 0) return null;
+  const exists = await query("select 1 from lumen.users where id = $1", [userId]);
+  if (exists.rows.length === 0) return null;
+  return addPointRecord(userId, delta, `管理员调整：${reason || "无说明"}`);
+}
+
+// ---------- 取消任务 ----------
+export async function cancelTask(taskId: string): Promise<{
+  ok: boolean;
+  reason?: string;
+  refund?: number;
+}> {
+  const cur = await query<{
+    status: TaskStatus; user_id: string; points_cost: number;
+  }>(
+    "select status, user_id, points_cost from lumen.generation_tasks where id = $1",
+    [taskId]
+  );
+  const row = cur.rows[0];
+  if (!row) return { ok: false, reason: "任务不存在" };
+  if (row.status !== "queued" && row.status !== "running") {
+    return { ok: false, reason: "仅排队中/运行中的任务可取消" };
+  }
+
+  await query(`
+    update lumen.generation_tasks
+      set status='cancelled', updated_at=now(), completed_at=now()
+    where id=$1 and status in ('queued','running')
+  `, [taskId]);
+
+  // 退还预扣积分
+  let refund = 0;
+  if (row.points_cost > 0) {
+    refund = row.points_cost;
+    await addPointRecord(row.user_id, row.points_cost, `任务取消退还 ${taskId}`);
+  }
+
+  // 清理半成品
+  await deleteTaskImages(taskId);
+  try {
+    await deleteTaskObjects(row.user_id, taskId);
+  } catch {
+    // 对象清理失败不影响取消结果
+  }
+
+  return { ok: true, refund };
+}
+
+// ---------- 失败任务重试（克隆为新任务并重新扣费） ----------
+export async function retryTask(oldTaskId: string): Promise<{
+  ok: boolean;
+  reason?: string;
+  newTaskId?: string;
+}> {
+  const old = await query<{
+    user_id: string; prompt: string; negative_prompt: string;
+    model: string; aspect_ratio: string; image_count: number;
+    status: TaskStatus; points_cost: number;
+  }>(`select * from lumen.generation_tasks where id = $1`, [oldTaskId]);
+  const src = old.rows[0];
+  if (!src) return { ok: false, reason: "任务不存在" };
+  if (src.status !== "failed") {
+    return { ok: false, reason: "仅失败任务可重试" };
+  }
+
+  const userRes = await query<{ points: number }>(
+    "select points from lumen.users where id = $1", [src.user_id]
+  );
+  const userPoints = userRes.rows[0]?.points ?? 0;
+  if (userPoints < src.points_cost) {
+    return { ok: false, reason: "用户积分不足，无法重试" };
+  }
+
+  const newId = nextId("t");
+  const now = new Date();
+  await query(`
+    insert into lumen.generation_tasks
+      (id, user_id, prompt, negative_prompt, model, aspect_ratio,
+       image_count, status, progress, points_cost, created_at, updated_at)
+    values ($1,$2,$3,$4,$5,$6,$7,'queued',0,$8,$9,$9)
+  `, [
+    newId, src.user_id, src.prompt, src.negative_prompt ?? "",
+    src.model, src.aspect_ratio, src.image_count, src.points_cost, now
+  ]);
+  await addPointRecord(src.user_id, -src.points_cost, `重试任务 ${newId}`);
+
+  return { ok: true, newTaskId: newId };
+}
+
+// ---------- 内容审核 ----------
+export async function moderatePost(
+  postId: string,
+  action: "approve" | "reject"
+): Promise<boolean> {
+  const mstatus = action === "approve" ? "approved" : "rejected";
+  const visibility = action === "approve" ? "public" : "rejected";
+  const res = await query(`
+    update lumen.shared_posts
+      set moderation_status = $1, visibility = $2
+    where id = $3
+  `, [mstatus, visibility, postId]);
+  return (res.rowCount ?? 0) > 0;
+}
+
+export async function logApiCall(entry: {
+  route: string;
+  method: string;
+  userId?: string | null;
+  statusCode: number;
+  durationMs: number;
+  requestId?: string;
+}): Promise<void> {
+  await query(`
+    insert into lumen.api_call_logs
+      (id, route, method, user_id, status_code, duration_ms, request_id, created_at)
+    values ($1,$2,$3,$4,$5,$6,$7, now())
+  `, [
+    nextId("al"), entry.route, entry.method, entry.userId ?? null,
+    entry.statusCode, entry.durationMs, entry.requestId ?? null
+  ]);
+}
+
+export async function logProviderCall(entry: {
+  providerName: string;
+  taskId?: string | null;
+  status: string;
+  durationMs: number;
+  errorMessage?: string;
+}): Promise<void> {
+  await query(`
+    insert into lumen.provider_call_logs
+      (id, provider_name, task_id, status, duration_ms, error_message, created_at)
+    values ($1,$2,$3,$4,$5,$6, now())
+  `, [
+    nextId("vl"), entry.providerName, entry.taskId ?? null,
+    entry.status, entry.durationMs, entry.errorMessage ?? null
+  ]);
+}
+
+export async function insertHealthCheck(entry: {
+  serviceName: string;
+  checkType: string;
+  status: string;
+  detail?: Record<string, unknown>;
+}): Promise<void> {
+  await query(`
+    insert into lumen.system_health_checks
+      (id, service_name, check_type, status, detail, created_at)
+    values ($1,$2,$3,$4,$5, now())
+  `, [
+    nextId("hc"), entry.serviceName, entry.checkType,
+    entry.status, JSON.stringify(entry.detail ?? {})
+  ]);
 }

@@ -1,32 +1,72 @@
 "use client";
 
-import { useState } from "react";
-import { Flag, Heart, MessageCircle, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Flag, Heart, MessageCircle, RotateCcw, Check, Eye } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { adminPosts } from "@/lib/mock-data";
+import type { AdminPost } from "@/lib/db/types";
 import { cn, formatNumber, timeAgo } from "@/lib/utils";
 
-const statusFilters = ["全部", "published", "pending", "flagged"] as const;
-type StatusFilter = (typeof statusFilters)[number];
-
-const statusBadge: Record<
-  "published" | "pending" | "flagged",
-  { label: string; variant: "success" | "warning" | "destructive" }
-> = {
-  published: { label: "已发布", variant: "success" },
-  pending: { label: "待审核", variant: "warning" },
-  flagged: { label: "已举报", variant: "destructive" }
-};
+// 页面筛选项 → moderation_status
+const filters = [
+  { label: "全部", value: "全部" },
+  { label: "已发布", value: "approved" },
+  { label: "待审核", value: "pending" },
+  { label: "已下架", value: "rejected" }
+] as const;
 
 export default function AdminPostsPage() {
-  const [filter, setFilter] = useState<StatusFilter>("全部");
+  const [posts, setPosts] = useState<AdminPost[]>([]);
+  const [filter, setFilter] = useState<string>("全部");
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const filtered =
-    filter === "全部"
-      ? adminPosts
-      : adminPosts.filter((p) => p.status === filter);
+  const load = useCallback(async () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (filter !== "全部") params.set("moderation", filter);
+    const resp = await fetch(`/api/admin/posts?${params}`);
+    const data = await resp.json();
+    if (resp.ok) setPosts(data.posts);
+    setLoading(false);
+  }, [filter]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  }
+
+  async function moderate(postId: string, action: "approve" | "reject") {
+    setBusyId(postId);
+    try {
+      const resp = await fetch("/api/admin/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId, action })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error ?? "操作失败");
+      showToast(action === "approve" ? "已通过，作品恢复公开" : "已下架，作品不再公开展示");
+      await load();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "操作失败");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const badgeFor = (s: AdminPost["status"]) =>
+    s === "published"
+      ? { label: "已发布", variant: "success" as const }
+      : s === "pending"
+      ? { label: "待审核", variant: "warning" as const }
+      : { label: "已下架", variant: "destructive" as const };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -37,28 +77,37 @@ export default function AdminPostsPage() {
         </p>
       </header>
 
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 rounded-md bg-secondary px-4 py-2 text-xs border border-border shadow-lg">
+          {toast}
+        </div>
+      )}
+
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {statusFilters.map((f) => (
+        {filters.map((f) => (
           <Button
-            key={f}
+            key={f.value}
             size="sm"
-            variant={filter === f ? "secondary" : "ghost"}
-            onClick={() => setFilter(f)}
+            variant={filter === f.value ? "secondary" : "ghost"}
+            onClick={() => setFilter(f.value)}
           >
-            {f === "published"
-              ? "已发布"
-              : f === "pending"
-              ? "待审核"
-              : f === "flagged"
-              ? "已举报"
-              : f}
+            {f.label}
           </Button>
         ))}
       </div>
 
+      {loading && (
+        <p className="py-10 text-center text-muted-foreground text-xs">加载中…</p>
+      )}
+      {!loading && posts.length === 0 && (
+        <p className="py-10 text-center text-muted-foreground text-xs">
+          没有匹配的作品
+        </p>
+      )}
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filtered.map((p) => {
-          const badge = statusBadge[p.status];
+        {posts.map((p) => {
+          const badge = badgeFor(p.status);
           return (
             <Card key={p.id} className="overflow-hidden flex flex-col">
               <div className="relative aspect-square bg-secondary/30">
@@ -100,26 +149,37 @@ export default function AdminPostsPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-auto pt-2">
-                  <Button size="sm" variant="outline" className="flex-1 h-8">
-                    {p.status === "pending"
-                      ? "审核"
-                      : p.status === "flagged"
-                      ? "复核"
-                      : "查看"}
-                  </Button>
+                  {p.status !== "published" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 h-8"
+                      disabled={busyId === p.id}
+                      onClick={() => moderate(p.id, "approve")}
+                    >
+                      <Check className="h-3.5 w-3.5 mr-1" />
+                      {p.status === "pending" ? "审核通过" : "恢复上架"}
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" className="flex-1 h-8" asChild>
+                      <a href={`/app/posts/${p.id}`} target="_blank" rel="noreferrer">
+                        <Eye className="h-3.5 w-3.5 mr-1" />
+                        查看
+                      </a>
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
                     className={cn(
                       "h-8 px-2",
-                      p.status === "published"
-                        ? "text-destructive"
-                        : "text-muted-foreground"
+                      p.status === "published" ? "text-destructive" : "text-muted-foreground"
                     )}
-                    disabled={p.status !== "published"}
+                    disabled={busyId === p.id || p.status !== "published"}
+                    title="下架"
+                    onClick={() => moderate(p.id, "reject")}
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
-                    下架
                   </Button>
                 </div>
               </div>

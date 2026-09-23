@@ -30,7 +30,7 @@ export function getPool(): pg.Pool {
     user,
     password,
     ssl: useSsl ? { rejectUnauthorized: false } : false,
-    max: 5,
+    max: 3, // Supabase Session Pooler 上限 15 客户端，多进程共存时需保守
     idleTimeoutMillis: 30000
   });
   return _pool;

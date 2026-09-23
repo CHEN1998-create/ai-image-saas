@@ -1,10 +1,10 @@
 import { UserPlus, Activity, CreditCard, DollarSign } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { getAnalytics } from "@/lib/db";
+import { getAnalyticsData } from "@/lib/db/reads";
 import { cn, formatNumber } from "@/lib/utils";
 
 export default async function AdminAnalyticsPage() {
-  const analytics = getAnalytics();
+  const analytics = await getAnalyticsData();
   const overview = [
   {
     label: "新增用户",
@@ -32,8 +32,8 @@ export default async function AdminAnalyticsPage() {
   }
 ];
 
-const maxTrend = Math.max(...analytics.trend);
-const maxPlan = Math.max(...analytics.planDistribution.map((p) => p.count));
+const maxTrend = Math.max(...analytics.trend, 1);
+const maxPlan = Math.max(...analytics.planDistribution.map((p) => p.count), 1);
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <header className="mb-6">

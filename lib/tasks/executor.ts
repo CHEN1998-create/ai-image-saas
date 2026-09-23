@@ -18,10 +18,17 @@ import {
   failTask,
   saveResultImage,
   addPointRecord,
-  deleteTaskImages
+  deleteTaskImages,
+  logProviderCall
 } from "@/lib/db/writes";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// 是否已被管理员取消（cancelTask 会置 cancelled 并自行退还积分/清理）
+async function isCancelled(taskId: string): Promise<boolean> {
+  const d = await getTaskById(taskId);
+  return !d || d.task.status === "cancelled";
+}
 
 export async function executeTask(taskId: string): Promise<void> {
   try {
@@ -33,6 +40,7 @@ export async function executeTask(taskId: string): Promise<void> {
 
     await updateTaskProgress(taskId, { status: "running", progress: 3 });
     await sleep(700); // 模拟任务调度/模型冷启动
+    if (await isCancelled(taskId)) return;
 
     const provider = getProvider(task.model);
     const baseSeed = hashString(task.prompt + "|" + task.id);
@@ -42,16 +50,37 @@ export async function executeTask(taskId: string): Promise<void> {
     for (let i = 0; i < task.count; i++) {
       const base = 5 + i * span;
       await updateTaskProgress(taskId, { progress: base });
+      if (await isCancelled(taskId)) return;
 
-      // 1) 生成图片字节
-      const result = await provider.generate({
-        prompt: task.prompt,
-        negativePrompt: task.negativePrompt,
-        model: task.model,
-        ratio: task.ratio,
-        seed: baseSeed + i
-      });
+      // 1) 生成图片字节（计时 + 记录 provider 调用日志）
+      const callStart = Date.now();
+      let result;
+      try {
+        result = await provider.generate({
+          prompt: task.prompt,
+          negativePrompt: task.negativePrompt,
+          model: task.model,
+          ratio: task.ratio,
+          seed: baseSeed + i
+        });
+        await logProviderCall({
+          providerName: provider.code ?? task.model,
+          taskId,
+          status: "success",
+          durationMs: Date.now() - callStart
+        });
+      } catch (genErr) {
+        await logProviderCall({
+          providerName: provider.code ?? task.model,
+          taskId,
+          status: "failed",
+          durationMs: Date.now() - callStart,
+          errorMessage: genErr instanceof Error ? genErr.message : "模型调用失败"
+        });
+        throw genErr;
+      }
       await updateTaskProgress(taskId, { progress: base + Math.floor(span * 0.55) });
+      if (await isCancelled(taskId)) return;
 
       // 2) 上传对象存储
       const imageId = nextId("g");
@@ -63,6 +92,7 @@ export async function executeTask(taskId: string): Promise<void> {
         contentType: result.contentType
       });
       await updateTaskProgress(taskId, { progress: base + Math.floor(span * 0.8) });
+      if (await isCancelled(taskId)) return;
 
       // 3) 结果入库
       await saveResultImage({
@@ -76,6 +106,7 @@ export async function executeTask(taskId: string): Promise<void> {
       });
     }
 
+    if (await isCancelled(taskId)) return;
     await completeTask(taskId);
   } catch (e) {
     const message = e instanceof Error ? e.message : "生成失败";

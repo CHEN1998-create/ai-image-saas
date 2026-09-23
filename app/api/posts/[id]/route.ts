@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const user = await requireUser();
-  const post = await getPost(params.id);
+  const post = await getPost(params.id, user.id);
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const comments = await getComments(params.id);
   return NextResponse.json({ post, comments });

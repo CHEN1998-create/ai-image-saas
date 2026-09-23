@@ -1,7 +1,7 @@
 // lib/db 类型 — 与 lib/mock-data 对齐，补充 userId / admin 字段
 // server-only，供 lib/db 内部 + Route Handlers + Server Component 使用
 
-export type TaskStatus = "queued" | "running" | "success" | "failed";
+export type TaskStatus = "queued" | "running" | "success" | "failed" | "cancelled";
 
 export type Plan = {
   id: string;
@@ -176,4 +176,34 @@ export type AdminOverview = {
   sharedPosts: number;
   failedTasks24h: number;
   topUsers: AdminUser[];
+};
+
+// ---------- 监控日志 ----------
+export type ApiCallLog = {
+  id: string;
+  route: string;
+  method: string;
+  userId: string | null;
+  statusCode: number;
+  durationMs: number;
+  createdAt: string;
+};
+
+export type ProviderCallLog = {
+  id: string;
+  providerName: string;
+  taskId: string | null;
+  status: string;
+  durationMs: number;
+  errorMessage: string;
+  createdAt: string;
+};
+
+export type HealthCheck = {
+  id: string;
+  serviceName: string;
+  checkType: string;
+  status: string;
+  detail: Record<string, unknown>;
+  createdAt: string;
 };

@@ -1,11 +1,11 @@
-// Admin: points issued/consumed analytics
+// Admin: points issued/consumed analytics（真实聚合）
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { getAnalytics } from "@/lib/db";
+import { getAnalyticsData } from "@/lib/db/reads";
 
 export async function GET() {
-  const admin = await requireAdmin();
-  const a = getAnalytics();
+  await requireAdmin();
+  const a = await getAnalyticsData();
   return NextResponse.json({
     pointsIssued: a.overview.pointsIssued,
     pointsConsumed: a.overview.pointsConsumed,

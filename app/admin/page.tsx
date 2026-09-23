@@ -8,12 +8,12 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getAdminOverview, getAnalytics } from "@/lib/db";
+import { getAdminOverview, getAnalyticsData } from "@/lib/db";
 import { cn, formatNumber, formatDate } from "@/lib/utils";
 
 export default async function AdminHomePage() {
   const adminOverview = await getAdminOverview();
-  const analytics = getAnalytics();
+  const analytics = await getAnalyticsData();
 
   const stats = [
   {
@@ -42,7 +42,7 @@ export default async function AdminHomePage() {
   }
 ];
 
-const maxTrend = Math.max(...analytics.trend);
+const maxTrend = Math.max(...analytics.trend, 1);
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <header className="mb-6">

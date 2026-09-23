@@ -144,7 +144,8 @@ export default function GeneratePage() {
     queued: "排队中...",
     running: "正在生成",
     success: "生成完成",
-    failed: "生成失败"
+    failed: "生成失败",
+    cancelled: "已取消"
   };
 
   return (
