@@ -97,10 +97,18 @@ create table if not exists lumen.billing_records (
   amount_cents  integer not null default 0,
   points_delta  integer not null default 0,
   status        text not null default 'pending',
+  stripe_session_id text,
+  stripe_invoice_id text,
+  product_type  text,
   created_at    timestamptz not null default now()
 );
 create index if not exists idx_lumen_billing_user_created
   on lumen.billing_records (user_id, created_at desc);
+create unique index if not exists idx_lumen_billing_session
+  on lumen.billing_records (stripe_session_id)
+  where stripe_session_id is not null;
+create index if not exists idx_lumen_billing_status_created
+  on lumen.billing_records (status, created_at desc);
 
 -- ---------- 订阅套餐 ----------
 create table if not exists lumen.subscription_plans (

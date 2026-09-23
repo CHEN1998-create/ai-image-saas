@@ -130,18 +130,23 @@ export async function getPosts(): Promise<Post[]> {
   }));
 }
 
-export async function getPost(id: string): Promise<Post | null> {
+export async function getPost(
+  id: string,
+  currentUserId?: string
+): Promise<Post | null> {
   const res = await query(`
     select sp.id, sp.image_id, sp.user_id, sp.caption, sp.created_at,
            gi.image_url, gi.prompt, gi.model, gi.aspect_ratio,
            u.name as author_name, u.avatar as author_avatar,
            (select count(*) from lumen.post_likes pl where pl.post_id = sp.id) as likes_count,
-           (select count(*) from lumen.post_comments pc where pc.post_id = sp.id) as comments_count
+           (select count(*) from lumen.post_comments pc where pc.post_id = sp.id) as comments_count,
+           exists(select 1 from lumen.post_likes ml
+                  where ml.post_id = sp.id and ml.user_id = $2) as liked_by_me
     from lumen.shared_posts sp
     left join lumen.generated_images gi on gi.id = sp.image_id
     left join lumen.users u on u.id = sp.user_id
     where sp.id = $1
-  `, [id]);
+  `, [id, currentUserId ?? null]);
   const r = res.rows[0];
   if (!r) return null;
   return {
@@ -150,7 +155,7 @@ export async function getPost(id: string): Promise<Post | null> {
     prompt: r.prompt ?? "", model: r.model ?? "", ratio: r.aspect_ratio ?? "1:1",
     author: { name: r.author_name ?? "Unknown", avatar: r.author_avatar ?? "" },
     caption: r.caption ?? "", likes: Number(r.likes_count),
-    comments: Number(r.comments_count), reposts: 0, liked: false,
+    comments: Number(r.comments_count), reposts: 0, liked: !!r.liked_by_me,
     createdAt: toIso(r.created_at), tags: []
   };
 }

@@ -2,8 +2,6 @@ import Link from "next/link";
 import {
   Heart,
   MessageCircle,
-  Repeat2,
-  Share2,
   Copy,
   Wand2,
   ArrowLeft
@@ -12,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
-import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { PostActions } from "@/components/social/post-actions";
+import { CommentForm } from "@/components/social/comment-form";
 import { getCurrentUser } from "@/lib/auth";
 import { getPost, getPosts, getComments } from "@/lib/db";
 import { formatNumber, timeAgo } from "@/lib/utils";
@@ -24,7 +23,7 @@ export default async function PostDetailPage({
   params: { id: string };
 }) {
   const user = await getCurrentUser();
-  const post = (await getPost(params.id)) ?? (await getPosts())[0];
+  const post = (await getPost(params.id, user?.id)) ?? (await getPosts())[0];
   const sampleComments = post ? await getComments(post.id) : [];
 
   if (!post || !user) return null;
@@ -96,43 +95,28 @@ export default async function PostDetailPage({
             </div>
           </Card>
 
-          <div className="flex gap-2 mb-6">
+          <div className="flex gap-2 mb-4 flex-wrap">
             <Button variant="gradient" size="sm">
               <Wand2 className="h-4 w-4" /> 再次生成
             </Button>
-            <Button variant="outline" size="sm">
-              <Heart className="h-4 w-4" /> 点赞
-            </Button>
-            <Button variant="outline" size="sm">
-              <Share2 className="h-4 w-4" /> 分享
-            </Button>
+            <PostActions
+              postId={post.id}
+              initialLikes={post.likes}
+              initialLiked={post.liked ?? false}
+            />
           </div>
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
             <span className="flex items-center gap-1">
-              <Heart className="h-4 w-4 text-accent fill-accent" />{" "}
-              {formatNumber(post.likes)}
-            </span>
-            <span className="flex items-center gap-1">
-              <MessageCircle className="h-4 w-4" /> {post.comments}
-            </span>
-            <span className="flex items-center gap-1">
-              <Repeat2 className="h-4 w-4" /> {post.reposts}
+              <MessageCircle className="h-4 w-4" /> {formatNumber(post.comments)} 评论
             </span>
           </div>
 
           <Separator className="mb-4" />
 
           <h3 className="font-medium mb-3">评论</h3>
-          <div className="flex gap-2 mb-4">
-            <Avatar src={user.avatar} className="h-8 w-8" />
-            <div className="flex-1 flex gap-2">
-              <Textarea
-                placeholder="写下你的评论..."
-                className="min-h-[40px] text-sm"
-              />
-              <Button size="sm">发送</Button>
-            </div>
+          <div className="mb-4">
+            <CommentForm postId={post.id} avatar={user.avatar} />
           </div>
           <div className="space-y-4">
             {sampleComments.map((c) => (

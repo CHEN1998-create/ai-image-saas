@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import type { GalleryImage } from "@/lib/db";
+import { ShareToCommunity } from "@/components/social/share-to-community";
 import { cn, timeAgo } from "@/lib/utils";
 
 const filters = ["全部", "收藏", "flux-dev", "flux-pro", "sd3.5"];
@@ -108,6 +109,11 @@ export default function GalleryPage() {
                   <Button size="iconSm" variant="secondary">
                     <Heart className="h-4 w-4" />
                   </Button>
+                  <ShareToCommunity
+                    imageId={g.id}
+                    fallbackPrompt={g.prompt}
+                    iconOnly
+                  />
                   <Button size="iconSm" variant="secondary">
                     <Trash2 className="h-4 w-4" />
                   </Button>

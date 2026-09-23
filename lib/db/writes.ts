@@ -144,6 +144,44 @@ export async function addPointRecord(
   return { id, userId, type, delta, source, createdAt: now.toISOString() };
 }
 
+// ---------- 账单 ----------
+export async function createBillingRecord(input: {
+  userId: string;
+  type: string;            // subscription / topup
+  productType: string;     // subscription / topup
+  amountCents: number;
+  pointsDelta: number;
+  planCode?: string;
+  billingCycle?: string;
+  stripeSessionId?: string;
+  stripeInvoiceId?: string;
+  status: string;
+}): Promise<{ id: string; duplicated: boolean }> {
+  const id = nextId("b");
+  const now = new Date();
+  try {
+    await query(`
+      insert into lumen.billing_records
+        (id, user_id, plan_code, billing_cycle, type, amount_cents,
+         points_delta, status, stripe_session_id, stripe_invoice_id,
+         product_type, created_at)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+    `, [
+      id, input.userId, input.planCode ?? null, input.billingCycle ?? null,
+      input.type, input.amountCents, input.pointsDelta, input.status,
+      input.stripeSessionId || null, input.stripeInvoiceId || null,
+      input.productType, now
+    ]);
+    return { id, duplicated: false };
+  } catch (e) {
+    // stripe_session_id 唯一冲突 = 已履约，幂等返回
+    if (e instanceof Error && /duplicate key/i.test(e.message)) {
+      return { id, duplicated: true };
+    }
+    throw e;
+  }
+}
+
 // ---------- 图库 ----------
 export async function deleteGalleryImage(id: string): Promise<boolean> {
   const res = await query("delete from lumen.generated_images where id = $1", [id]);
@@ -247,8 +285,49 @@ export async function repostPost(
   postId: string,
   user: AuthUser
 ): Promise<Post | null> {
-  await addPointRecord(user.id, 10, `转发作品 ${postId}`);
-  return null;
+  // 取原帖（图片/文案信息）
+  const srcRes = await query(`
+    select sp.id, sp.caption, gi.image_url, gi.prompt, gi.model, gi.aspect_ratio,
+           u.name as author_name, u.avatar as author_avatar
+    from lumen.shared_posts sp
+    left join lumen.generated_images gi on gi.id = sp.image_id
+    left join lumen.users u on u.id = sp.user_id
+    where sp.id = $1
+  `, [postId]);
+  const src = srcRes.rows[0];
+  if (!src) return null;
+
+  // 防重复：同一用户对同一作品只转发一次
+  const dupRes = await query(
+    "select id from lumen.shared_posts where repost_from_post_id = $1 and user_id = $2 limit 1",
+    [postId, user.id]
+  );
+  const newId = nextId("post");
+  const now = new Date();
+
+  let postRowId = newId;
+  if (dupRes.rows.length > 0) {
+    // 已转发过：复用已存在的转发行，不重复发积分
+    postRowId = dupRes.rows[0].id;
+  } else {
+    await query(`
+      insert into lumen.shared_posts
+        (id, image_id, user_id, caption, visibility, repost_from_post_id, created_at)
+      values ($1,$2,$3,$4,'public',$5,$6)
+    `, [newId, src.image_id ?? null, user.id, src.caption, postId, now]);
+
+    await addPointRecord(user.id, 10, `转发作品 ${postId}`);
+  }
+
+  return {
+    id: postRowId, userId: user.id,
+    imageUrl: src.image_url ?? `https://picsum.photos/seed/${newId}/600/600`,
+    prompt: src.prompt ?? "", model: src.model ?? "",
+    ratio: src.aspect_ratio ?? "1:1",
+    author: { name: user.name, avatar: user.avatar },
+    caption: src.caption ?? "", likes: 0, comments: 0, reposts: 0,
+    createdAt: now.toISOString(), tags: []
+  };
 }
 
 // ---------- 每日签到 ----------
