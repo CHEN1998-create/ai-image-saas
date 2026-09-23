@@ -37,6 +37,7 @@ export type GenerationTask = {
   ratio: string;
   count: number;
   status: TaskStatus;
+  progress: number; // 0-100
   pointsCost: number;
   createdAt: string;
   error?: string;

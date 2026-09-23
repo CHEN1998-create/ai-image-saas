@@ -45,12 +45,18 @@ create table if not exists lumen.generation_tasks (
   aspect_ratio     text not null,
   image_count      integer not null default 1,
   status           text not null default 'queued',
+  progress         integer not null default 0,
+  provider_task_id text,
   error_message    text,
   points_cost      integer not null default 0,
-  created_at       timestamptz not null default now()
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  completed_at     timestamptz
 );
 create index if not exists idx_lumen_tasks_user_created
   on lumen.generation_tasks (user_id, created_at desc);
+create index if not exists idx_lumen_tasks_status
+  on lumen.generation_tasks (status, created_at desc);
 
 -- ---------- 生成图片 ----------
 create table if not exists lumen.generated_images (

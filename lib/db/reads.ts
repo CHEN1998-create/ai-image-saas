@@ -47,16 +47,52 @@ export async function getGallery(userId: string): Promise<GalleryImage[]> {
 export async function getGenerationTasks(userId: string): Promise<GenerationTask[]> {
   const res = await query(`
     select id, user_id, prompt, negative_prompt, model, aspect_ratio,
-           image_count, status, points_cost, error_message, created_at
+           image_count, status, progress, points_cost, error_message, created_at
     from lumen.generation_tasks where user_id = $1 order by created_at desc
   `, [userId]);
   return res.rows.map((r) => ({
     id: r.id, userId: r.user_id, prompt: r.prompt,
     negativePrompt: r.negative_prompt ?? "", model: r.model,
     ratio: r.aspect_ratio, count: r.image_count, status: r.status,
-    pointsCost: r.points_cost, createdAt: toIso(r.created_at),
-    error: r.error_message ?? undefined
+    progress: r.progress ?? 0, pointsCost: r.points_cost,
+    createdAt: toIso(r.created_at), error: r.error_message ?? undefined
   }));
+}
+
+// 查单个任务（含已生成图片），轮询用。校验归属，非本人返回 null。
+export async function getTaskById(
+  taskId: string,
+  userId?: string
+): Promise<{ task: GenerationTask; images: GalleryImage[] } | null> {
+  const res = await query(`
+    select id, user_id, prompt, negative_prompt, model, aspect_ratio,
+           image_count, status, progress, points_cost, error_message, created_at
+    from lumen.generation_tasks where id = $1
+  `, [taskId]);
+  const r = res.rows[0];
+  if (!r) return null;
+  if (userId && r.user_id !== userId) return null;
+
+  const task: GenerationTask = {
+    id: r.id, userId: r.user_id, prompt: r.prompt,
+    negativePrompt: r.negative_prompt ?? "", model: r.model,
+    ratio: r.aspect_ratio, count: r.image_count, status: r.status,
+    progress: r.progress ?? 0, pointsCost: r.points_cost,
+    createdAt: toIso(r.created_at), error: r.error_message ?? undefined
+  };
+
+  const imgRes = await query(`
+    select id, user_id, image_url as url, prompt, model,
+           aspect_ratio as ratio, is_favorite as favorite, created_at
+    from lumen.generated_images
+    where task_id = $1 order by created_at asc
+  `, [taskId]);
+  const images: GalleryImage[] = imgRes.rows.map((g) => ({
+    id: g.id, userId: g.user_id, url: g.url, prompt: g.prompt ?? "",
+    model: g.model ?? "", ratio: g.ratio ?? "1:1",
+    favorite: g.favorite, createdAt: toIso(g.created_at)
+  }));
+  return { task, images };
 }
 
 export async function getPointRecords(userId: string): Promise<PointRecord[]> {

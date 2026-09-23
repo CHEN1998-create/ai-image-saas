@@ -29,5 +29,10 @@ yarn-error.log*
 # mock 数据库（本地运行时数据，不提交）
 .mock-db/
 
+# 本地图片上传（dev 兜底，生产用 Supabase Storage）
+/public/uploads/
+
 # vercel
 .vercel
+cookies.txt
+.build.log

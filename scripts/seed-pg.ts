@@ -38,9 +38,17 @@ async function runSqlFile(path: string) {
 }
 
 async function ensureSchema() {
-  console.log("  → 执行建表 SQL ...");
-  await runSqlFile("scripts/0001_pg_init.sql");
-  console.log("  ✓ 表结构就绪\n");
+  console.log("  → 执行建表/迁移 SQL ...");
+  const fs = await import("node:fs");
+  const dir = resolve(process.cwd(), "scripts");
+  const files = fs
+    .readdirSync(dir)
+    .filter((f) => /^\d{4}_pg_.*\.sql$/.test(f))
+    .sort();
+  for (const f of files) {
+    await runSqlFile(`scripts/${f}`);
+  }
+  console.log(`  ✓ 表结构就绪（${files.length} 个迁移）\n`);
 }
 
 async function seedUsers() {
@@ -86,10 +94,11 @@ async function seedTasks() {
     await query(`
       insert into lumen.generation_tasks
         (id, user_id, prompt, negative_prompt, model, aspect_ratio,
-         image_count, status, points_cost, error_message, created_at)
-      values ($1,$2,$3,'',$4,$5,$6,$7,$8,$9,$10)
+         image_count, status, progress, points_cost, error_message, created_at)
+      values ($1,$2,$3,'',$4,$5,$6,$7,case when $7='success' then 100 else 0 end,$8,$9,$10)
       on conflict (id) do update set
         prompt = excluded.prompt, model = excluded.model, status = excluded.status,
+        progress = excluded.progress,
         points_cost = excluded.points_cost, error_message = excluded.error_message
     `, [t.id, ARIA_ID, t.prompt, t.model, t.ratio, t.count, t.status,
         t.pointsCost, t.error ?? null, t.createdAt]);

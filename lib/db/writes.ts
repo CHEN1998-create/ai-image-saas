@@ -1,5 +1,6 @@
 // lib/db 写入层 — PostgreSQL 直写
-// 写操作级联更新 points 记录与 users.points（调 lib/auth 的 applyPointsDelta）
+// 任务链路：createQueuedTask（预扣积分）→ 执行器 updateTaskProgress
+//          → saveResultImage 逐张入库 → success；失败 failTask 并退还积分
 
 import { query } from "@/lib/pg";
 import { applyPointsDelta } from "@/lib/auth";
@@ -9,11 +10,26 @@ import type {
   Comment, GalleryImage, GenerationTask, PointRecord, Post, TaskStatus
 } from "./types";
 
-const img = (seed: string, w = 600, h = 600) =>
-  `https://picsum.photos/seed/lumen-${seed}/${w}/${h}`;
+// ---------- 任务行映射 ----------
+interface TaskRow {
+  id: string; user_id: string; prompt: string; negative_prompt: string;
+  model: string; aspect_ratio: string; image_count: number;
+  status: TaskStatus; progress: number; error_message: string;
+  points_cost: number; created_at: Date;
+}
 
-// ---------- 生图任务 ----------
-export async function createGenerationTask(
+function rowToTask(r: TaskRow): GenerationTask {
+  return {
+    id: r.id, userId: r.user_id, prompt: r.prompt,
+    negativePrompt: r.negative_prompt ?? "", model: r.model,
+    ratio: r.aspect_ratio, count: r.image_count, status: r.status,
+    progress: r.progress ?? 0, pointsCost: r.points_cost,
+    createdAt: toIso(r.created_at), error: r.error_message ?? undefined
+  };
+}
+
+// ---------- 建任务（queued，同步预扣积分）----------
+export async function createQueuedTask(
   user: AuthUser,
   input: {
     prompt: string;
@@ -23,43 +39,91 @@ export async function createGenerationTask(
     count: number;
     pointsCost: number;
   }
-): Promise<{ task: GenerationTask; images: GalleryImage[] }> {
+): Promise<GenerationTask> {
   const taskId = nextId("t");
   const now = new Date();
-  const iso = now.toISOString();
-
   await query(`
     insert into lumen.generation_tasks
       (id, user_id, prompt, negative_prompt, model, aspect_ratio,
-       image_count, status, points_cost, created_at)
-    values ($1,$2,$3,$4,$5,$6,$7,'success',$8,$9)
+       image_count, status, progress, points_cost, created_at, updated_at)
+    values ($1,$2,$3,$4,$5,$6,$7,'queued',0,$8,$9,$9)
   `, [taskId, user.id, input.prompt, input.negativePrompt ?? "",
       input.model, input.ratio, input.count, input.pointsCost, now]);
 
-  const images: GalleryImage[] = [];
-  for (let i = 0; i < input.count; i++) {
-    const id = nextId("g");
-    images.push({
-      id, userId: user.id, url: img(`${taskId}-${i}`),
-      prompt: input.prompt, model: input.model, ratio: input.ratio,
-      favorite: false, createdAt: iso
-    });
-    await query(`
-      insert into lumen.generated_images
-        (id, task_id, user_id, image_url, prompt, model, aspect_ratio, is_favorite, created_at)
-      values ($1,$2,$3,$4,$5,$6,$7,false,$8)
-    `, [id, taskId, user.id, img(`${taskId}-${i}`), input.prompt, input.model, input.ratio, now]);
-  }
-
+  // 预扣积分
   await addPointRecord(user.id, -input.pointsCost, `生成任务 ${taskId}`);
 
-  const task: GenerationTask = {
+  return {
     id: taskId, userId: user.id, prompt: input.prompt,
     negativePrompt: input.negativePrompt ?? "", model: input.model,
-    ratio: input.ratio, count: input.count, status: "success",
-    pointsCost: input.pointsCost, createdAt: iso
+    ratio: input.ratio, count: input.count, status: "queued",
+    progress: 0, pointsCost: input.pointsCost, createdAt: now.toISOString()
   };
-  return { task, images };
+}
+
+// ---------- 任务状态更新 ----------
+export async function updateTaskProgress(
+  taskId: string,
+  patch: { status?: TaskStatus; progress?: number; error?: string }
+): Promise<void> {
+  const sets = ["updated_at = now()"];
+  const params: unknown[] = [];
+  let i = 1;
+  if (patch.status !== undefined) { sets.push(`status = $${i++}`); params.push(patch.status); }
+  if (patch.progress !== undefined) { sets.push(`progress = $${i++}`); params.push(patch.progress); }
+  if (patch.error !== undefined) { sets.push(`error_message = $${i++}`); params.push(patch.error); }
+  params.push(taskId);
+  await query(
+    `update lumen.generation_tasks set ${sets.join(", ")} where id = $${i}`,
+    params
+  );
+}
+
+export async function completeTask(taskId: string): Promise<void> {
+  await query(
+    `update lumen.generation_tasks
+       set status='success', progress=100, updated_at=now(), completed_at=now()
+     where id=$1`,
+    [taskId]
+  );
+}
+
+export async function failTask(taskId: string, error: string): Promise<void> {
+  await query(
+    `update lumen.generation_tasks
+       set status='failed', updated_at=now(), completed_at=now(), error_message=$2
+     where id=$1`,
+    [taskId, error]
+  );
+}
+
+// ---------- 结果图片入库 ----------
+// 删除某任务已入库的图片行（任务失败回滚用）
+export async function deleteTaskImages(taskId: string): Promise<void> {
+  await query("delete from lumen.generated_images where task_id = $1", [taskId]);
+}
+
+export async function saveResultImage(input: {
+  id: string;
+  taskId: string;
+  userId: string;
+  url: string;
+  prompt: string;
+  model: string;
+  ratio: string;
+}): Promise<GalleryImage> {
+  const now = new Date();
+  await query(`
+    insert into lumen.generated_images
+      (id, task_id, user_id, image_url, prompt, model, aspect_ratio, is_favorite, created_at)
+    values ($1,$2,$3,$4,$5,$6,$7,false,$8)
+  `, [input.id, input.taskId, input.userId, input.url,
+      input.prompt, input.model, input.ratio, now]);
+  return {
+    id: input.id, userId: input.userId, url: input.url,
+    prompt: input.prompt, model: input.model, ratio: input.ratio,
+    favorite: false, createdAt: now.toISOString()
+  };
 }
 
 // ---------- 积分记录 ----------
@@ -77,9 +141,7 @@ export async function addPointRecord(
     values ($1,$2,$3,$4,$5,$6)
   `, [id, userId, type, delta, source, now]);
   await applyPointsDelta(userId, delta);
-  return {
-    id, userId, type, delta, source, createdAt: now.toISOString()
-  };
+  return { id, userId, type, delta, source, createdAt: now.toISOString() };
 }
 
 // ---------- 图库 ----------
@@ -91,7 +153,6 @@ export async function deleteGalleryImage(id: string): Promise<boolean> {
 export async function toggleFavorite(
   id: string
 ): Promise<GalleryImage | null> {
-  // 先查当前值，再翻转
   const cur = await query<{ is_favorite: boolean }>(
     "select is_favorite from lumen.generated_images where id = $1", [id]
   );
@@ -99,7 +160,6 @@ export async function toggleFavorite(
   if (!row) return null;
   const newVal = !row.is_favorite;
   await query("update lumen.generated_images set is_favorite = $1 where id = $2", [newVal, id]);
-  // 返回完整对象
   const full = await query(`
     select id, user_id, image_url as url, prompt, model, aspect_ratio as ratio,
            is_favorite as favorite, created_at
@@ -137,8 +197,9 @@ export async function publishPost(
 
   return {
     id: postId, userId: user.id,
-    imageUrl: imageRow.image_url ?? img(`post-${postId}`),
-    prompt: imageRow.prompt ?? "", model: imageRow.model ?? "", ratio: imageRow.aspect_ratio ?? "1:1",
+    imageUrl: imageRow.image_url,
+    prompt: imageRow.prompt ?? "", model: imageRow.model ?? "",
+    ratio: imageRow.aspect_ratio ?? "1:1",
     author: { name: user.name, avatar: user.avatar },
     caption: input.caption, likes: 0, comments: 0, reposts: 0,
     createdAt: now.toISOString(), tags: input.tags ?? []
@@ -149,7 +210,6 @@ export async function togglePostLike(
   postId: string,
   userId: string
 ): Promise<Post | null> {
-  // 查是否已点赞
   const cur = await query(
     "select * from lumen.post_likes where post_id = $1 and user_id = $2",
     [postId, userId]
@@ -163,7 +223,7 @@ export async function togglePostLike(
       values ($1,$2,$3,$4)
     `, [nextId("l"), postId, userId, now]);
   }
-  return null; // Post 计数通过 reads.getPost 查询
+  return null;
 }
 
 export async function addComment(

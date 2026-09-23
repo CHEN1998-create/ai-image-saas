@@ -1,7 +1,9 @@
-// POST /api/generations — 创建生图任务（mock 同步成功）
+// POST /api/generations — 创建生图任务（异步执行）
+// 立即返回 queued 任务，执行器后台跑，前端轮询 GET /api/generations/[id]
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { createGenerationTask } from "@/lib/db";
+import { createQueuedTask } from "@/lib/db";
+import { executeTask } from "@/lib/tasks/executor";
 import { models } from "@/lib/mock-data";
 
 export async function POST(request: Request) {
@@ -32,10 +34,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "积分不足" }, { status: 400 });
   }
 
-  // 模拟生成耗时，保留"生成中"过渡
-  await new Promise((r) => setTimeout(r, 1500));
-
-  const { task, images } = await createGenerationTask(user, {
+  // 建 queued 任务（内部预扣积分）
+  const task = await createQueuedTask(user, {
     prompt: prompt.trim(),
     negativePrompt,
     model: model.code,
@@ -44,5 +44,8 @@ export async function POST(request: Request) {
     pointsCost
   });
 
-  return NextResponse.json({ task, images, points: user.points - pointsCost });
+  // fire-and-forget：执行器在响应返回后继续跑
+  void executeTask(task.id);
+
+  return NextResponse.json({ task });
 }

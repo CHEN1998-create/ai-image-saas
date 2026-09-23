@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Wand2,
   Sparkles,
@@ -8,14 +8,15 @@ import {
   Heart,
   Share2,
   Download,
-  Coins
+  Coins,
+  AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { models, aspectRatios } from "@/lib/mock-data";
-import type { GalleryImage } from "@/lib/db";
+import type { GalleryImage, TaskStatus } from "@/lib/db";
 import { cn, formatNumber } from "@/lib/utils";
 
 const suggestions = [
@@ -24,32 +25,86 @@ const suggestions = [
   "abstract liquid metal shapes, octane render"
 ];
 
+interface LiveTask {
+  id: string;
+  status: TaskStatus;
+  progress: number;
+}
+
 export default function GeneratePage() {
   const [prompt, setPrompt] = useState("");
   const [negative, setNegative] = useState("");
   const [model, setModel] = useState(models[0].code);
   const [ratio, setRatio] = useState("1:1");
   const [count, setCount] = useState(4);
-  const [loading, setLoading] = useState(false);
+  const [task, setTask] = useState<LiveTask | null>(null);
   const [results, setResults] = useState<GalleryImage[]>([]);
   const [points, setPoints] = useState<number | null>(null);
   const [error, setError] = useState("");
 
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const taskIdRef = useRef<string | null>(null);
+
+  const busy = task?.status === "queued" || task?.status === "running";
+  const selectedModel = models.find((m) => m.code === model)!;
+  const cost = selectedModel.pointsPerImage * count;
+
   useEffect(() => {
+    refreshPoints();
+    return () => stopPolling();
+  }, []);
+
+  function refreshPoints() {
     fetch("/api/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d?.user?.points != null && setPoints(d.user.points))
       .catch(() => {});
-  }, []);
+  }
 
-  const selectedModel = models.find((m) => m.code === model)!;
-  const cost = selectedModel.pointsPerImage * count;
+  function stopPolling() {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  // 轮询任务，直到 success/failed
+  function pollTask(id: string) {
+    timerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/generations/${id}`);
+        if (res.status === 404) {
+          setError("任务不存在");
+          setTask(null);
+          return;
+        }
+        const data = await res.json();
+        setTask({ id, status: data.task.status, progress: data.task.progress });
+        if (Array.isArray(data.images)) setResults(data.images);
+
+        if (data.task.status === "success") {
+          refreshPoints();
+          return; // 停止轮询
+        }
+        if (data.task.status === "failed") {
+          setError(data.task.error || "生成失败");
+          setResults([]);
+          refreshPoints(); // 失败已退还积分
+          return;
+        }
+      } catch {
+        // 单次网络抖动：继续轮询，下一轮自愈
+      }
+      // 仍在 queued/running，安排下一次
+      if (taskIdRef.current === id) pollTask(id);
+    }, 1500);
+  }
 
   const handleGenerate = async () => {
-    if (!prompt) return;
-    setLoading(true);
+    if (!prompt || busy) return;
     setError("");
     setResults([]);
+    setTask({ id: "", status: "queued", progress: 0 });
     try {
       const res = await fetch("/api/generations", {
         method: "POST",
@@ -65,16 +120,31 @@ export default function GeneratePage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "生成失败");
-        setResults([]);
-      } else {
-        setResults(data.images ?? []);
-        if (typeof data.points === "number") setPoints(data.points);
+        setTask(null);
+        return;
       }
+      taskIdRef.current = data.task.id;
+      setTask({ id: data.task.id, status: "queued", progress: 0 });
+      pollTask(data.task.id);
     } catch {
       setError("网络错误，请重试");
-    } finally {
-      setLoading(false);
+      setTask(null);
     }
+  };
+
+  const resetWorkspace = () => {
+    stopPolling();
+    taskIdRef.current = null;
+    setTask(null);
+    setResults([]);
+    setError("");
+  };
+
+  const statusText: Record<TaskStatus, string> = {
+    queued: "排队中...",
+    running: "正在生成",
+    success: "生成完成",
+    failed: "生成失败"
   };
 
   return (
@@ -184,11 +254,12 @@ export default function GeneratePage() {
               className="w-full"
               size="lg"
               onClick={handleGenerate}
-              disabled={loading || !prompt}
+              disabled={busy || !prompt}
             >
-              {loading ? (
+              {busy ? (
                 <>
-                  <RefreshCw className="h-4 w-4 animate-spin" /> 生成中...
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  {statusText[task!.status]}
                 </>
               ) : (
                 <>
@@ -200,8 +271,8 @@ export default function GeneratePage() {
               本次将消耗 {cost} 积分
             </p>
             {error && (
-              <p className="text-xs text-destructive text-center mt-1">
-                {error}
+              <p className="text-xs text-destructive text-center mt-1 flex items-center justify-center gap-1">
+                <AlertCircle className="h-3 w-3" /> {error}
               </p>
             )}
           </div>
@@ -209,61 +280,67 @@ export default function GeneratePage() {
 
         {/* 结果区 */}
         <div className="flex-1 p-6 overflow-auto scrollbar-thin">
-          {loading && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {Array.from({ length: count }).map((_, i) => (
-                <div
-                  key={i}
-                  className="aspect-square rounded-xl bg-secondary overflow-hidden relative"
-                >
-                  <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-foreground/5 to-transparent animate-shimmer" />
+          {/* 进行中：进度条 + 槽位（图片逐张填充） */}
+          {busy && (
+            <div>
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">
+                    {statusText[task!.status]}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {task!.progress}%
+                  </span>
                 </div>
-              ))}
+                <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-primary to-violet-400 transition-all duration-500"
+                    style={{ width: `${task!.progress}%` }}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {Array.from({ length: count }).map((_, i) =>
+                  results[i] ? (
+                    <ResultCard key={results[i].id} image={results[i]} ratio={ratio} />
+                  ) : (
+                    <div
+                      key={i}
+                      className="rounded-xl bg-secondary overflow-hidden relative"
+                      style={{ aspectRatio: ratio.replace(":", "/") }}
+                    >
+                      <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-foreground/5 to-transparent animate-shimmer" />
+                    </div>
+                  )
+                )}
+              </div>
             </div>
           )}
 
-          {!loading && results.length > 0 && (
+          {/* 完成 */}
+          {task?.status === "success" && results.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold">生成结果</h2>
-                <Button variant="outline" size="sm" onClick={handleGenerate}>
-                  <RefreshCw className="h-4 w-4" /> 再次生成
+                <h2 className="font-semibold">
+                  生成结果
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {results.length} 张 · 已存入图库
+                  </span>
+                </h2>
+                <Button variant="outline" size="sm" onClick={resetWorkspace}>
+                  <RefreshCw className="h-4 w-4" /> 新的生成
                 </Button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {results.map((r, i) => (
-                  <Card key={i} className="overflow-hidden group">
-                    <div className="relative aspect-square">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={r.url}
-                        alt={r.prompt}
-                        className="h-full w-full object-cover"
-                      />
-                      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 flex items-center justify-center gap-2">
-                        <Button size="iconSm" variant="secondary">
-                          <Heart className="h-4 w-4" />
-                        </Button>
-                        <Button size="iconSm" variant="secondary">
-                          <Share2 className="h-4 w-4" />
-                        </Button>
-                        <Button size="iconSm" variant="secondary">
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="p-3">
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {r.prompt}
-                      </p>
-                    </div>
-                  </Card>
+                {results.map((r) => (
+                  <ResultCard key={r.id} image={r} ratio={ratio} />
                 ))}
               </div>
             </div>
           )}
 
-          {!loading && results.length === 0 && (
+          {/* 空状态 */}
+          {!task && (
             <div className="h-full flex flex-col items-center justify-center text-center">
               <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-4">
                 <Sparkles className="h-8 w-8" />
@@ -288,5 +365,39 @@ export default function GeneratePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// 单张结果卡片：图片 + hover 操作（下载为真实链接）
+function ResultCard({ image, ratio }: { image: GalleryImage; ratio: string }) {
+  return (
+    <Card className="overflow-hidden group">
+      <div className="relative" style={{ aspectRatio: ratio.replace(":", "/") }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={image.url}
+          alt={image.prompt}
+          className="h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 flex items-center justify-center gap-2">
+          <Button size="iconSm" variant="secondary">
+            <Heart className="h-4 w-4" />
+          </Button>
+          <Button size="iconSm" variant="secondary">
+            <Share2 className="h-4 w-4" />
+          </Button>
+          <a href={image.url} download target="_blank" rel="noreferrer">
+            <Button size="iconSm" variant="secondary">
+              <Download className="h-4 w-4" />
+            </Button>
+          </a>
+        </div>
+      </div>
+      <div className="p-3">
+        <p className="text-xs text-muted-foreground line-clamp-1">
+          {image.prompt}
+        </p>
+      </div>
+    </Card>
   );
 }
