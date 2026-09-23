@@ -1,6 +1,6 @@
 # Lumen · 现代 AI 生图 SaaS
 
-一个完整可演示的 AI 生图 SaaS 全栈项目：官网展示 → 注册登录 → 积分生成图片 → 社区分享互动 → Stripe 订阅/充值 → 管理后台与数据监控。
+一个完整可演示的 AI 生图 SaaS 全栈项目：官网展示 → 注册登录 → **真实 AI 模型生图** → 社区分享互动 → Stripe 订阅/充值 → 管理后台与数据监控。生图接入 Cloudflare Workers AI（SDXL），中文提示词自动翻译为英文，图片持久化到对象存储。
 
 - **线上演示**：<https://ai-image-saas-one.vercel.app>
 - **源码仓库**：<https://github.com/CHEN1998-create/ai-image-saas>
@@ -39,6 +39,8 @@
 ## 技术栈
 
 - **框架**：Next.js 14（App Router）+ TypeScript（strict）+ Tailwind CSS，无 UI 框架依赖
+- **AI 生图**：Cloudflare Workers AI（SDXL，免费额度），Provider 抽象可切换；备选硅基流动（Kolors/Flux 等），未配置时回退占位图兜底
+- **提示词翻译**：中文 prompt 经 Workers AI Llama-3.1 自动译为英文（失败回退原文）
 - **数据库**：Supabase PostgreSQL（`pg` 连接池直连，业务表隔离在 `lumen` schema）
 - **对象存储**：Supabase Storage（开发环境经 Cloudflare Worker 中继，上传失败自动回退本地 `public/uploads`）
 - **支付**：Stripe Checkout（订阅 + 一次性积分包），webhook 驱动积分到账，success 页验单兜底
@@ -89,3 +91,8 @@ stripe listen --api-key <STRIPE_SECRET_KEY> \
 | `SUPABASE_SERVICE_ROLE_KEY` | 对象存储服务端上传用（Dashboard → API） |
 | `STRIPE_SECRET_KEY` | Stripe 测试密钥 `sk_test_...` |
 | `STRIPE_WEBHOOK_SECRET` | webhook 签名密钥 `whsec_...`（`stripe listen` 输出或 Dashboard webhook endpoint） |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 帐户 ID（真实生图，Dashboard 地址栏 / Workers AI 页可见） |
+| `CLOUDFLARE_AI_API_KEY` | Workers AI API Token（Dashboard → Workers AI → REST API → Create API Token） |
+| `SILICONFLOW_API_KEY` | 可选，硅基流动生图备选（未配置不影响，Workers AI 已够用） |
+
+> 说明：未配置 `CLOUDFLARE_*` 时系统自动回退占位图，应用功能不中断。
